@@ -39,13 +39,13 @@ def run(args):
         if (step + 1) % cfg.log_every == 0:
             trainer.logging('Train')
             trainer.write_summary('Train')
-            trainer.save_model('Train')
             trainer.log_init()
 
         if (step + 1) % cfg.dev_every == 0:
             trainer.dev_epoch()
             trainer.logging('Dev')
             trainer.write_summary('Dev')
+            trainer.save_model('Train')
             trainer.save_model('Dev')
 
     trainer.close()
