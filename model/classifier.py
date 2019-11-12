@@ -1,10 +1,26 @@
+import torch
 from torch import nn
 
+import torch.nn.functional as F
 from model.backbone.vgg import (vgg19, vgg19_bn)
 from model.backbone.resnet import (resnet18, resnet34, resnet50, resnet101,
-                                   resnet152)
+                                   resnet152, resnext50_32x4d,
+                                   resnext101_32x8d)
+from model.backbone.resnetfpn5 import (resnet18fpn5, resnet34fpn5,
+                                       resnet50fpn5, resnet101fpn5,
+                                       resnet152fpn5, resnext50_32x4dfpn5,
+                                       resnext101_32x8dfpn5)
+from model.backbone.resnetfpn6 import (resnet18fpn6, resnet34fpn6,
+                                       resnet50fpn6, resnet101fpn6,
+                                       resnet152fpn6, resnext50_32x4dfpn6,
+                                       resnext101_32x8dfpn6)
 from model.backbone.densenet import (densenet121, densenet169, densenet201)
 from model.backbone.inception import (inception_v3)
+from model.backbone.senet import senet154
+from model.attention_map import AttentionMap
+
+
+from model.utils import get_pooling
 
 
 BACKBONES = {'vgg19': vgg19,
@@ -14,73 +30,69 @@ BACKBONES = {'vgg19': vgg19,
              'resnet50': resnet50,
              'resnet101': resnet101,
              'resnet152': resnet152,
+             'resnext50_32x4d': resnext50_32x4d,
+             'resnext101_32x8d': resnext101_32x8d,
+             'resnet18fpn5': resnet18fpn5,
+             'resnet34fpn5': resnet34fpn5,
+             'resnet50fpn5': resnet50fpn5,
+             'resnet101fpn5': resnet101fpn5,
+             'resnet152fpn5': resnet152fpn5,
+             'resnext50_32x4dfpn5': resnext50_32x4dfpn5,
+             'resnext101_32x8dfpn5': resnext101_32x8dfpn5,
+             'resnet18fpn6': resnet18fpn6,
+             'resnet34fpn6': resnet34fpn6,
+             'resnet50fpn6': resnet50fpn6,
+             'resnet101fpn6': resnet101fpn6,
+             'resnet152fpn6': resnet152fpn6,
+             'resnext50_32x4dfpn6': resnext50_32x4dfpn6,
+             'resnext101_32x8dfpn6': resnext101_32x8dfpn6,
              'densenet121': densenet121,
              'densenet169': densenet169,
              'densenet201': densenet201,
              'inception_v3': inception_v3}
-
-
-BACKBONES_TYPES = {'vgg19': 'vgg',
-                   'vgg19_bn': 'vgg',
-                   'resnet18': 'resnet',
-                   'resnet34': 'resnet',
-                   'resnet50': 'resnet',
-                   'resnet101': 'resnet',
-                   'resnet152': 'resnet',
-                   'densenet121': 'densenet',
-                   'densenet169': 'densenet',
-                   'densenet201': 'densenet',
-                   'inception_v3': 'inception'}
-
+             
 
 class Classifier(nn.Module):
 
     def __init__(self, cfg):
         super(Classifier, self).__init__()
         self.cfg = cfg
-        self.backbone = BACKBONES[cfg.backbone](cfg.pretrained)
-        self._init_classifier()
-
-    def _init_classifier(self):
-        for index, num_class in enumerate(self.cfg.num_classes):
-            if BACKBONES_TYPES[self.cfg.backbone] == 'vgg':
-                setattr(self, "fc_" + str(index), nn.Sequential(
-                    nn.Linear(512 * 7 * 7, 4096),
-                    nn.ReLU(True),
-                    nn.Dropout(),
-                    nn.Linear(4096, 4096),
-                    nn.ReLU(True),
-                    nn.Dropout(),
-                    nn.Linear(4096, num_class),
-                ))
-            elif BACKBONES_TYPES[self.cfg.backbone] == 'resnet':
-                setattr(self, "fc_" + str(index),
-                        nn.Linear(512 * self.backbone.block.expansion,
-                                  num_class))
-            elif BACKBONES_TYPES[self.cfg.backbone] == 'densenet':
-                setattr(self, "fc_" + str(index),
-                        nn.Linear(self.backbone.num_features, num_class))
-            elif BACKBONES_TYPES[self.cfg.backbone] == 'inception':
-                setattr(self, "fc_" + str(index),
-                        nn.Linear(2048, num_class))
-            else:
-                raise Exception(
-                    'Unknown backbone type : {}'.format(self.cfg.backbone)
-                )
-
+        self.backbone = BACKBONES[cfg.backbone](cfg)
+        self.global_pooling = []
+        self.attention_map = AttentionMap(self.cfg,
+                                          self.backbone.num_features)
+        for index in range(self.cfg.num_tasks):
+            setattr(self, "fc_" + str(index),
+                    nn.Conv2d(self.backbone.num_features, 1, kernel_size=1,
+                              stride=1, padding=0, bias=True))
+            self.global_pooling.append(get_pooling(self.cfg, index, self.training))
             classifier = getattr(self, "fc_" + str(index))
-            if isinstance(classifier, nn.Linear):
-                classifier.weight.data.normal_(0, 0.01)
-                classifier.bias.data.zero_()
+            classifier.weight.data.normal_(0, 0.01)
+            classifier.bias.data.zero_()
+
 
     def cuda(self, device=None):
         return self._apply(lambda t: t.cuda(device))
 
     def forward(self, x):
-        x = self.backbone.forward(x)
-        outs = list()
-        for index, num_task in enumerate(self.cfg.num_classes):
+        feat_map = self.backbone(x)
+        if self.cfg.attention_map != "None":
+            feat_map = self.attention_map(feat_map)
+        (N, C, H, W) = tuple(feat_map.shape)
+        logits = torch.zeros(N, self.cfg.num_tasks).to(feat_map.device)
+        logit_maps = torch.zeros(N, self.cfg.num_tasks,
+                                 H, W).to(feat_map.device)
+
+        for index, num_class in enumerate(self.cfg.num_classes):
+            
             classifier = getattr(self, "fc_" + str(index))
-            out = classifier(x)
-            outs.append(out)
-        return outs
+            logit_map = classifier(feat_map)
+            feat = self.global_pooling[index](feat_map)
+            feat = F.dropout(feat, training=self.training)
+
+            logit = classifier(feat)
+            logit = logit.squeeze(-1).squeeze(-1)
+            logits[:, index: index+1] = logit
+            logit_maps[:, index: index+1, ...] = logit_map
+
+        return (logits, logit_maps)

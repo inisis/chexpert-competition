@@ -1,10 +1,7 @@
 import torch.nn as nn
+import torch.nn.functional as F
 from .utils import load_state_dict_from_url
 from model.utils import get_norm
-
-__all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
-           'resnet152', 'resnext50_32x4d', 'resnext101_32x8d']
-
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -107,12 +104,12 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNet(nn.Module):
+class ResNetFPN(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, norm_type='Unknown',
                  zero_init_residual=False, groups=1, width_per_group=64,
                  replace_stride_with_dilation=None, norm_layer=None):
-        super(ResNet, self).__init__()
+        super(ResNetFPN, self).__init__()
 
         self.inplanes = 64
         self.dilation = 1
@@ -141,14 +138,27 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
                                        dilate=replace_stride_with_dilation[2],
                                        norm_type=norm_type)
+        self.layer5 = self._make_layer(block, 512, layers[4], stride=2,
+                                       norm_type=norm_type)
+        self.layer6 = self._make_layer(block, 512, layers[5], stride=2,
+                                       norm_type=norm_type)
+
+        self.up2_1 = nn.ConvTranspose2d(self.inplanes, self.inplanes, 2, stride=2, padding=0,
+                                        bias=False)
+        self.up2_2 = nn.ConvTranspose2d(self.inplanes, self.inplanes, 2, stride=2, padding=0,
+                                        bias=False)
+
+        self.merge1 = conv3x3(self.inplanes, self.inplanes)
+        self.merge2 = conv3x3(self.inplanes, self.inplanes)
+
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.num_features = 512 * block.expansion
+        self.fc = nn.Linear(self.inplanes, num_classes)
+        self.num_features = self.inplanes
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm, nn.InstanceNorm2d)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
@@ -196,23 +206,26 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        # x = self.avgpool(x)
-        # x = x.view(x.size(0), -1)
-        # x = self.fc(x)
+        down64 = self.layer5(x)
+        down128 = self.layer6(down64)
+        up64 = self.up2_1(down128)
+        merge64 = F.relu(self.merge1(up64 + down64), inplace=True)
+        up32 = self.up2_2(merge64)
+        merge32 = F.relu(self.merge2(up32 + x), inplace=True)
 
-        return x
+        return merge32
 
 
-def _resnet(arch, block, layers, pretrained, progress, norm_type, **kwargs):
-    model = ResNet(block, layers, norm_type=norm_type, **kwargs)
+def _resnetfpn(arch, block, layers, pretrained, progress, norm_type, **kwargs):
+    model = ResNetFPN(block, layers, norm_type=norm_type, **kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
     return model
 
 
-def resnet18(cfg, progress=True, **kwargs):
+def resnet18fpn6(cfg, progress=True, **kwargs):
     r"""ResNet-18 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>'_
 
@@ -220,11 +233,11 @@ def resnet18(cfg, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet18', BasicBlock, [2, 2, 2, 2], cfg.pretrained,
+    return _resnetfpn('resnet18', BasicBlock, [2, 2, 2, 2, 2, 2], cfg.pretrained,
                    progress, norm_type=cfg.norm_type, **kwargs)
 
 
-def resnet34(cfg, progress=True, **kwargs):
+def resnet34fpn6(cfg, progress=True, **kwargs):
     r"""ResNet-34 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>'_
 
@@ -232,11 +245,11 @@ def resnet34(cfg, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet34', BasicBlock, [3, 4, 6, 3], cfg.pretrained,
+    return _resnetfpn('resnet34', BasicBlock, [3, 4, 6, 3, 2, 2], cfg.pretrained,
                    progress, norm_type=cfg.norm_type, **kwargs)
 
 
-def resnet50(cfg, progress=True, **kwargs):
+def resnet50fpn6(cfg, progress=True, **kwargs):
     r"""ResNet-50 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>'_
 
@@ -244,11 +257,11 @@ def resnet50(cfg, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet50', Bottleneck, [3, 4, 6, 3], cfg.pretrained,
+    return _resnetfpn('resnet50', Bottleneck, [3, 4, 6, 3, 2, 2], cfg.pretrained,
                    progress, norm_type=cfg.norm_type, **kwargs)
 
 
-def resnet101(cfg, progress=True, **kwargs):
+def resnet101fpn6(cfg, progress=True, **kwargs):
     r"""ResNet-101 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>'_
 
@@ -256,11 +269,11 @@ def resnet101(cfg, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet101', Bottleneck, [3, 4, 23, 3], cfg.pretrained,
+    return _resnetfpn('resnet101', Bottleneck, [3, 4, 23, 3, 2, 2], cfg.pretrained,
                    progress, norm_type=cfg.norm_type, **kwargs)
 
 
-def resnet152(cfg, progress=True, **kwargs):
+def resnet152fpn6(cfg, progress=True, **kwargs):
     r"""ResNet-152 model from
     `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>'_
 
@@ -268,11 +281,11 @@ def resnet152(cfg, progress=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    return _resnet('resnet152', Bottleneck, [3, 8, 36, 3], cfg.pretrained,
+    return _resnetfpn('resnet152', Bottleneck, [3, 8, 36, 3, 2, 2], cfg.pretrained,
                    progress, norm_type=cfg.norm_type, **kwargs)
 
 
-def resnext50_32x4d(cfg, progress=True, **kwargs):
+def resnext50_32x4dfpn6(cfg, progress=True, **kwargs):
     r"""ResNeXt-50 32x4d model from
     `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
 
@@ -282,12 +295,12 @@ def resnext50_32x4d(cfg, progress=True, **kwargs):
     """
     kwargs['groups'] = 32
     kwargs['width_per_group'] = 4
-    return _resnet('resnext50_32x4d', Bottleneck, [3, 4, 6, 3],
+    return _resnetfpn('resnext50_32x4d', Bottleneck, [3, 4, 6, 3, 2, 2],
                    cfg.pretrained, progress,
                    norm_type=cfg.norm_type, **kwargs)
 
 
-def resnext101_32x8d(cfg, progress=True, **kwargs):
+def resnext101_32x8dfpn6(cfg, progress=True, **kwargs):
     r"""ResNeXt-101 32x8d model from
     `"Aggregated Residual Transformation for Deep Neural Networks" <https://arxiv.org/pdf/1611.05431.pdf>`_
 
@@ -297,6 +310,6 @@ def resnext101_32x8d(cfg, progress=True, **kwargs):
     """
     kwargs['groups'] = 32
     kwargs['width_per_group'] = 8
-    return _resnet('resnext101_32x8d', Bottleneck, [3, 4, 23, 3],
+    return _resnetfpn('resnext101_32x8d', Bottleneck, [3, 4, 23, 3, 2, 2],
                    cfg.pretrained, progress,
                    norm_type=cfg.norm_type, **kwargs)

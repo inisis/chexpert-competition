@@ -1,12 +1,12 @@
 import os
 import sys
+import glob
 import argparse
 
 import numpy as np
 import pandas as pd
 from sklearn import metrics
 from matplotlib import pyplot as plt
-from scipy.stats.mstats import gmean
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 
@@ -41,10 +41,10 @@ def read_csv(csv_path, true_csv=False):
             else:
                 # probs.append(list(map(float, fields[5:])))
                 prob = []
-                for index, value in enumerate(fields[1:]):
-                    if index == 1 or index == 3:
+                for index, value in enumerate(fields[5:]):
+                    if index == 5 or index == 8:
                         prob.append(dict_[1].get(value))
-                    elif index == 0 or index == 2 or index == 4:
+                    elif index == 2 or index == 6 or index == 10:
                         prob.append(dict_[0].get(value))
                 prob = list(map(int, prob))
                 probs.append(prob)
@@ -52,13 +52,10 @@ def read_csv(csv_path, true_csv=False):
 
     return (image_paths, probs, header)
 
-def convert(list):
-    return pd.Series(list)
-
 def get_study(path):
     return path[0 : path.rfind('/')]
 
-def transform_csv(input_path, output_path, true_csv=False):
+def transform_csv(input_path, output_path):
     """
     to transform the first column of the original csv or test csv from Path to Study 
     """
@@ -66,20 +63,20 @@ def transform_csv(input_path, output_path, true_csv=False):
     infile = infile.fillna('Unknown')
     infile.Path.str.split('/')
     infile['Study'] = infile.Path.apply(get_study)
-    
-    if true_csv:
-        outfile = infile.drop('Path', axis = 1).groupby('Study').max().reset_index()
-    else:
-        # outfile = infile.drop('Path', axis = 1).groupby('Study').apply(gmean).apply(convert).reset_index()
-        # outfile = infile.drop('Path', axis = 1).groupby('Study').max().reset_index()
-        outfile = infile.drop('Path', axis = 1).groupby('Study').mean().reset_index()
+    outfile = infile.drop('Path', axis = 1).groupby('Study').max().reset_index()
     outfile.to_csv(output_path, index = False)
 
 def run(args):
-    
-    transform_csv(args.pred_csv_path, args.plot_path + 'pred_csv_done.csv')
 
-    transform_csv(args.true_csv_path, args.plot_path + 'true_csv_done.csv', True)
+    all_filenames = [i for i in glob.glob(args.pred_csv_path + '*.{}'.format('csv'))]
+
+    combined_csv = pd.concat([pd.read_csv(f) for f in all_filenames ])
+
+    combined_csv.to_csv(args.plot_path + "combined_csv.csv", index=False)
+
+    transform_csv(args.plot_path + 'combined_csv.csv', args.plot_path + 'pred_csv_done.csv')
+    
+    transform_csv(args.true_csv_path, args.plot_path + 'true_csv_done.csv')
 
     images_pred, probs_pred, header_pred = read_csv(args.plot_path + 'pred_csv_done.csv')
     images_true, probs_true, header_true = read_csv(args.plot_path + 'true_csv_done.csv', True)
@@ -87,15 +84,16 @@ def run(args):
     # assert header_pred == header_true
     assert images_pred == images_true
 
-    header = header_true[1:]
-    auc_list = []
-    for i in range(len(header)):
+    # num_labels = len(header_true) - 5
+    num_labels = 5
+    header = [header_true[7], header_true[10], header_true[11], header_true[13], header_true[15]]
+
+    for i in range(num_labels):
         label = header[i]
         y_pred = probs_pred[:, i]
         y_true = probs_true[:, i]
         fpr, tpr, thresholds = metrics.roc_curve(y_true, y_pred, pos_label=1)
         auc = metrics.auc(fpr, tpr)
-        auc_list.append(auc)
         acc = metrics.accuracy_score(
             y_true, (y_pred >= args.prob_thred).astype(int), normalize=True
         )
@@ -114,7 +112,6 @@ def run(args):
         plt.grid()
         plt.savefig(os.path.join(args.plot_path, args.base_name + '_' + label + '_roc.png'),
                     bbox_inches='tight')
-    print(auc_list)
 
 
 def main():

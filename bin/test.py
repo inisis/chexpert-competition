@@ -6,17 +6,15 @@ import json
 import time
 from easydict import EasyDict as edict
 import torch
+import numpy as np
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
-from torch.autograd import Variable
 import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 
-from data.dataset import ImageDataset  # noqa
+from data.dataset import CSVDataset  # noqa
 from model.classifier import Classifier  # noqa
-
-# python bin/test.py --num_workers=20  --device_ids='2' weights weights/dev.csv weights/dev_test.csv
 
 parser = argparse.ArgumentParser(description='Test model')
 
@@ -32,12 +30,20 @@ parser.add_argument('--device_ids', default='0', type=str, help="GPU indices "
                     "comma separated, e.g. '0,1' ")
 
 
-def get_label(cfg, output):
-    if cfg.criterion == "BCE":
-        prob = torch.sigmoid(output)
-        return prob.ge(0.5).float()
-    elif cfg.criterion == "CE":
-        return torch.argmax(output, dim=1)
+def get_pred(output, t, cfg):
+    if cfg.criterion == 'BCE' or cfg.criterion == "FL":
+        for num_class in cfg.num_classes:
+            assert num_class == 1
+        pred = torch.sigmoid(output[:, t]).cpu().detach().numpy()
+    elif cfg.criterion == 'CE':
+        for num_class in cfg.num_classes:
+            assert num_class >= 2
+        prob = F.softmax(output)
+        pred = prob[:, 1].cpu().detach().numpy()
+    else:
+        raise Exception('Unknown criterion : {}'.format(cfg.criterion))
+
+    return pred
 
 
 def test_epoch(cfg, args, model, dataloader, out_csv_path):
@@ -47,31 +53,29 @@ def test_epoch(cfg, args, model, dataloader, out_csv_path):
     device = torch.device('cuda:{}'.format(device_ids[0]))
     steps = len(dataloader)
     dataiter = iter(dataloader)
+    num_tasks = len(cfg.num_classes)
 
     with open(cfg.train_csv) as f:
-        test_header = f.readline().strip('\n').split(',')
+        test_header = ['Path', 'Cardiomegaly', 'Edema', 'Consolidation', 'Atelectasis', 'Pleural_Effusion']
 
     with open(out_csv_path, 'w') as f:
         f.write(','.join(test_header) + '\n')
         for step in range(steps):
             image, path = next(dataiter)
             image = image.to(device)
-            output = model(image)
+            output, _ = model(image)
+            batch_size = len(path)
+            pred = np.zeros((num_tasks, batch_size))
 
-            # prob = torch.sigmoid(output)
+            for i in range(num_tasks):
+                pred[i] = get_pred(output, i, cfg)
 
-            pred = Variable(torch.Tensor(image.size()[0], len(output)).type_as(output[0].data))
-            for index in range(len(output)):
-                # pred_batch = [str(value) for value in value]
-                prob = F.softmax(output[index])
-                pred[:, index] = prob[:, 1]
-
-            for index in range(len(path)):
-                pred_batch = ",".join(str(value) for value in pred[index].tolist())
-                result = path[index] + ',' + pred_batch
+            for i in range(batch_size):
+                batch = ','.join(map(lambda x: '{:.5f}'.format(x), pred[:, i]))
+                result = path[i] + ',' + batch
                 f.write(result + '\n')
                 logging.info('{}, Image : {}, Prob : {}'.format(
-                    time.strftime("%Y-%m-%d %H:%M:%S"), path[index], pred_batch))
+                    time.strftime("%Y-%m-%d %H:%M:%S"), path[i], batch))
 
 
 def run(args):
@@ -89,11 +93,13 @@ def run(args):
     model = Classifier(cfg)
     model = DataParallel(model, device_ids=device_ids).to(device).eval()
     ckpt_path = os.path.join(args.model_path, 'best.ckpt')
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(ckpt_path, map_location=device)
     model.module.load_state_dict(ckpt['state_dict'])
 
+    torch.save(model.module, "competition.pth")
+
     dataloader_test = DataLoader(
-        ImageDataset(args.in_csv_path, cfg, mode='test'),
+        CSVDataset(args.in_csv_path, cfg, mode='test'),
         batch_size=cfg.dev_batch_size, num_workers=args.num_workers,
         drop_last=False, shuffle=False)
 
