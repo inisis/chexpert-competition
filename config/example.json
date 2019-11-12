@@ -32,5 +32,7 @@
     "momentum": 0.9,
     "weight_decay": 0.0005,
     "best_target": "auc",
-    "loss_batch_weight": true
+    "loss_batch_weight": true,
+    "enhance_index": [2,6],
+    "enhance_times": 1
 }

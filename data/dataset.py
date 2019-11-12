@@ -23,26 +23,23 @@ class CSVDataset(Dataset):
                 labels = []
                 fields = line.strip('\n').split(',')
                 image_path = fields[0]
+                flg_enhance = False
                 for index, value in enumerate(fields[1:]):
                     if index == 1 or index == 3:
                         labels.append(self.dict[1].get(value))
+                        if self.dict[1].get(value) == '1' and self.cfg.enhance_index.count(index) > 0:
+                            flg_enhance = True
                     elif index == 0 or index == 2 or index == 4:
                         labels.append(self.dict[0].get(value))
+                        if self.dict[1].get(value) == '1' and self.cfg.enhance_index.count(index) > 0:
+                            fig_enhance = True
                 labels = list(map(int, labels))
-                if (labels[0] == 1 or labels[2] == 1) and mode == 'train':
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
-                else:
-                    self._image_paths.append(image_path)
-                    self._labels.append(labels)
+                self._image_paths.append(image_path)
+                self._labels.append(labels)
+                if flg_enhance and self._mode == 'train':
+                    for i in range(self.cfg.enhance_times):
+                        self._image_paths.append(image_path)
+                        self._labels.append(labels)
         self._num_image = len(self._image_paths)
 
     def __len__(self):
