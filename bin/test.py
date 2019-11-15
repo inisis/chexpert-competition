@@ -96,8 +96,6 @@ def run(args):
     ckpt = torch.load(ckpt_path, map_location=device)
     model.module.load_state_dict(ckpt['state_dict'])
 
-    torch.save(model.module, "competition.pth")
-
     dataloader_test = DataLoader(
         CSVDataset(args.in_csv_path, cfg, mode='test'),
         batch_size=cfg.dev_batch_size, num_workers=args.num_workers,
