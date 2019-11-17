@@ -108,7 +108,9 @@ class Trainer(object):
         self.optimizer = get_optimizer(model.parameters(), cfg)
         self.p = Augmentor.Pipeline()
         self.p.rotate(probability=0.7, max_left_rotation=5, max_right_rotation=5)
-        
+        self.p.flip_left_right(probability=0.5)
+        self.p.zoom_random(probability=0.5, percentage_area=0.8)
+
         self.transforms = torchvision.transforms.Compose([
                          self.p.torch_transform(),
                          from_list

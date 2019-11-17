@@ -30,9 +30,9 @@
     "lr_factor": 0.1,
     "lr_epochs": [3, 4, 5],
     "momentum": 0.9,
-    "weight_decay": 0.0005,
+    "weight_decay": 0.0003,
     "best_target": "auc",
     "loss_batch_weight": true,
-    "enhance_index": [2,6],
-    "enhance_times": 1
+    "enhance_index": [0,2],
+    "enhance_times": 4
 }
