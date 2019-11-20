@@ -79,18 +79,16 @@ def get_loss(output, target, index, device, cfg):
         label = torch.sigmoid(output[:, index]).ge(0.5).float()
         acc = (target[:, index] == label).float().sum() / len(label)
     elif cfg.criterion == 'BCE' and cfg.loss_batch_weight:
-        label = torch.sigmoid(output[:, index]).ge(0.5).float()
-        p_N = target.sum(dim=0)
-        n_N = len(label) - p_N
-        loss = 0
-        for i in range(len(label)):
-            loss_i = F.binary_cross_entropy_with_logits(output[i, index],
-                                                        target[i, index])
-            if target[i, index] == 1:
-                loss += loss_i * (n_N[index]/len(label))
-            elif target[i, index] == 0:
-                loss += loss_i * (p_N[index]/len(label))
-        loss = loss / len(label)
+        with torch.no_grad():
+            label = torch.sigmoid(output[:, index]).ge(0.5).float()
+            pos_sum = target.sum(dim=0) # shape (num_tasks, )
+            negprob_sum = ((1 - target) * (1 - torch.sigmoid(output))).sum(dim=0) # shape (num_task, )
+            pos_weight = negprob_sum / pos_sum
+            pos_weight = torch.where(pos_sum == 0, torch.tensor(1.).to(device).type_as(target), pos_weight)
+        
+        loss = F.binary_cross_entropy_with_logits(output[:, index],
+                                                  target[:, index],
+                                                  pos_weight=pos_weight[index])
         acc = (target[:, index] == label).float().sum() / len(label)
     elif cfg.criterion == 'FL':
         input = output[:, index]

@@ -116,7 +116,7 @@ class Trainer(object):
                          from_list
                      ])
         self.dataloader_train = DataLoader(
-            CSVDataset(self.cfg.train_csv, self.cfg, mode='train', transform=self.transforms),
+            CSVDataset(self.cfg.train_csv, self.cfg, mode='train', transform=None),
             batch_size=self.cfg.train_batch_size,
             num_workers=self.args.num_workers,
             drop_last=False, shuffle=True)
