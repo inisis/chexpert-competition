@@ -28,3 +28,13 @@
 | Atelectasis        |    98423    |  3575  |  449236  |  49275  |
 | Pleural_Effusion        |    163144    |  78742  |  338408  |  20215  |
 | total        |    600510   |
+
+
+| total        | positive   |  negative  |  unmention  |  uncertain  |
+| --------   | -----:  | :----:  | :----:  | :----:  |
+| Cardiomegaly     | 91346 |   36082     |   456525     |   16556     |
+| Edema        |   88810 + 32393  |   61645   |   417661   |        |
+| Consolidation        |    29458    |  42296  |  494510  |  34245  |
+| Atelectasis        |    98423  + 49275  |  3575  |  449236  |    |
+| Pleural_Effusion        |    163144    |  78742  |  338408  |  20215  |
+| total        |    600510   |
