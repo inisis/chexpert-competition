@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import SGD, Adadelta, Adagrad, Adam, RMSprop
-from model.pooling import LogSumExpPool, ExpPool, LinearPool
+from model.pooling import LogSumExpPool, ExpPool, LinearPool, AvgMaxPool
 
 def get_norm(norm_type, num_features, num_groups=32, eps=1e-5):
     if norm_type == 'BatchNorm':
@@ -45,6 +45,8 @@ def get_pooling(cfg, index, training):
         return ExpPool()
     elif cfg.pooling[index] == 'LINEAR':
         return LinearPool()
+    elif cfg.pooling[index] == 'AVG_MAX':
+        return AvgMaxPool()
     else:
         raise Exception('Unknown Pooling: {}'.format(cfg.pooling[index]))
 

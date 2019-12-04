@@ -1,5 +1,5 @@
 {
- "train_csv": "/data/Chexpert/CheXpert-v1.0/train_local.csv",
+ "train_csv": "/data/Chexpert/CheXpert-v1.0/co_train_mit_sdf.csv",
  "dev_csv": "/data/Chexpert/CheXpert-v1.0/valid_local.csv",
  "backbone": "densenet169",
  "width": 512,
@@ -40,11 +40,11 @@
  "dev_every": 100,
  "epoch": 6,
  "pooling": [
-  "AVG",
-  "AVG",
-  "AVG",
-  "AVG",
-  "AVG"
+  "AVG_MAX",
+  "AVG_MAX",
+  "AVG_MAX",
+  "AVG_MAX",
+  "AVG_MAX"
  ],
  "attention_map": "None",
  "norm_type": "BatchNorm",
@@ -62,8 +62,7 @@
  "best_target": "auc",
  "loss_batch_weight": true,
  "enhance_index": [
-  0,
   2
  ],
- "enhance_times": 4
+ "enhance_times": 3
 }

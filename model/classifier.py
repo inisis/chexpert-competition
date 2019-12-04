@@ -61,9 +61,13 @@ class Classifier(nn.Module):
         self.global_pooling = []
         self.attention_map = AttentionMap(self.cfg,
                                           self.backbone.num_features)
+        
         for index in range(self.cfg.num_tasks):
+            expand = 1
+            if self.cfg.pooling[index] == 'AVG_MAX':
+                expand = 2
             setattr(self, "fc_" + str(index),
-                    nn.Conv2d(self.backbone.num_features, 1, kernel_size=1,
+                    nn.Conv2d(self.backbone.num_features * expand, 1, kernel_size=1,
                               stride=1, padding=0, bias=True))
             self.global_pooling.append(get_pooling(self.cfg, index, self.training))
             classifier = getattr(self, "fc_" + str(index))
@@ -86,13 +90,15 @@ class Classifier(nn.Module):
         for index, num_class in enumerate(self.cfg.num_classes):
             
             classifier = getattr(self, "fc_" + str(index))
-            logit_map = classifier(feat_map)
+            logit_map = None
+            if not (self.cfg.pooling[index] == 'AVG_MAX'):
+                logit_map = classifier(feat_map)
+                logit_maps[:, index: index+1, ...] = logit_map
             feat = self.global_pooling[index](feat_map)
             feat = F.dropout(feat, training=self.training)
 
             logit = classifier(feat)
             logit = logit.squeeze(-1).squeeze(-1)
             logits[:, index: index+1] = logit
-            logit_maps[:, index: index+1, ...] = logit_map
 
         return (logits, logit_maps)

@@ -1,6 +1,19 @@
 import torch
 from torch import nn
 
+
+class AvgMaxPool(nn.Module):
+    def __init__(self):
+        super(AvgMaxPool, self).__init__()
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.maxpool = nn.AdaptiveMaxPool2d((1, 1))
+
+    def forward(self, feat_map):
+        a = self.avgpool(feat_map)
+        b = self.maxpool(feat_map)
+        return torch.cat((a, b), 1)
+
+
 class ProbPool(nn.Module):
 
     def __init__(self):
