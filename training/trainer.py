@@ -109,14 +109,17 @@ class Trainer(object):
         self.p = Augmentor.Pipeline()
         self.p.rotate(probability=0.7, max_left_rotation=5, max_right_rotation=5)
         self.p.flip_left_right(probability=0.5)
-        self.p.zoom_random(probability=0.5, percentage_area=0.8)
+        self.p.zoom_random(probability=0.5, percentage_area=0.9)
 
-        self.transforms = torchvision.transforms.Compose([
-                         self.p.torch_transform(),
-                         from_list
-                     ])
+        if self.cfg.transforms == False:
+            self.transforms = None
+        else:
+            self.transforms = torchvision.transforms.Compose([
+                             self.p.torch_transform(),
+                             from_list
+                         ])
         self.dataloader_train = DataLoader(
-            CSVDataset(self.cfg.train_csv, self.cfg, mode='train', transform=None),
+            CSVDataset(self.cfg.train_csv, self.cfg, mode='train', transform=self.transforms),
             batch_size=self.cfg.train_batch_size,
             num_workers=self.args.num_workers,
             drop_last=False, shuffle=True)

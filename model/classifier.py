@@ -73,6 +73,9 @@ class Classifier(nn.Module):
             classifier = getattr(self, "fc_" + str(index))
             classifier.weight.data.normal_(0, 0.01)
             classifier.bias.data.zero_()
+            if self.cfg.fc_bn:
+                setattr(self, "bn_" + str(index),
+                        nn.BatchNorm2d(self.backbone.num_features * expand))
 
 
     def cuda(self, device=None):
@@ -95,6 +98,9 @@ class Classifier(nn.Module):
                 logit_map = classifier(feat_map)
                 logit_maps[:, index: index+1, ...] = logit_map
             feat = self.global_pooling[index](feat_map)
+            if self.cfg.fc_bn:
+                bn = getattr(self, "bn_" + str(index))
+                feat = bn(feat)
             feat = F.dropout(feat, training=self.training)
 
             logit = classifier(feat)
