@@ -390,25 +390,44 @@ class Trainer(object):
                     .format(time.strftime("%Y-%m-%d %H:%M:%S"),
                             self.summary['epoch'], self.summary['step'],
                             auc_dev_str))
-            for t in range(self.cfg.num_tasks):
-                if(self.summary['auc_dev_best_each'][t] <= self.summary['auc_dev'][t]):
-                    self.summary['auc_dev_best_each'][t] = self.summary['auc_dev'][t].copy()
-                    model_name = self.label_header[t] + '_best.ckpt'
-                    torch.save(
-                        {'epoch': self.summary['epoch'],
-                         'step': self.summary['step'],
-                         'auc_dev_best': self.summary['auc_dev_best_each'],
-                         'state_dict': self.model.module.state_dict()},
-                        os.path.join(self.args.save_path, model_name)
-                    )
-                    logging.info(
-                        '{}, Best, Epoch : {}, Step : {}, Label: {}, Auc : {}'
-                        .format(time.strftime("%Y-%m-%d %H:%M:%S"),
-                                self.summary['epoch'], self.summary['step'],
-                                self.label_header[t],
-                                str(self.summary['auc_dev_best_each'][t])))
+            
+            include_auc = self.summary['auc_dev'][self.cfg.save_index].mean()
+            if(self.summary['auc_dev_best_each'][0] <= include_auc):
+                self.summary['auc_dev_best_each'][0] = include_auc
+                save_str = '_'.join(map(lambda x: '{}'.format(x), self.cfg.save_index))
+                model_name = save_str + '_best.ckpt'
+                torch.save(
+                    {'epoch': self.summary['epoch'],
+                     'step': self.summary['step'],
+                     'auc_dev_best': self.summary['auc_dev_best_each'][0],
+                     'state_dict': self.model.module.state_dict()},
+                    os.path.join(self.args.save_path, model_name)
+                )
+                logging.info(
+                    '{}, Best, Epoch : {}, Step : {}, Label: {}, Auc : {}'
+                    .format(time.strftime("%Y-%m-%d %H:%M:%S"),
+                            self.summary['epoch'], self.summary['step'],
+                            save_str,
+                            str(include_auc)))
 
-
+            exclude_auc = np.delete(self.summary['auc_dev'], self.cfg.save_index).mean()
+            
+            if(self.summary['auc_dev_best_each'][1] <= exclude_auc):
+                self.summary['auc_dev_best_each'][1] = exclude_auc
+                model_name = 'exclude_best.ckpt'
+                torch.save(
+                    {'epoch': self.summary['epoch'],
+                     'step': self.summary['step'],
+                     'auc_dev_best': self.summary['auc_dev_best_each'][1],
+                     'state_dict': self.model.module.state_dict()},
+                    os.path.join(self.args.save_path, model_name)
+                )
+                logging.info(
+                    '{}, Best, Epoch : {}, Step : {}, Label: {}, Auc : {}'
+                    .format(time.strftime("%Y-%m-%d %H:%M:%S"),
+                            self.summary['epoch'], self.summary['step'],
+                            'exclude',
+                            str(exclude_auc)))
               
     def close(self):
          self.summary_writer.close()
