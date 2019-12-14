@@ -55,8 +55,7 @@ def test_epoch(cfg, args, model, dataloader, out_csv_path):
     dataiter = iter(dataloader)
     num_tasks = len(cfg.num_classes)
 
-    with open(cfg.train_csv) as f:
-        test_header = ['Path', 'Cardiomegaly', 'Edema', 'Consolidation', 'Atelectasis', 'Pleural_Effusion']
+    test_header = ['Path', 'Cardiomegaly', 'Edema', 'Consolidation', 'Atelectasis', 'Pleural_Effusion']
 
     with open(out_csv_path, 'w') as f:
         f.write(','.join(test_header) + '\n')
