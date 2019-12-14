@@ -38,3 +38,9 @@
 | Atelectasis        |    98423  + 49275  |  3575  |  449236  |    |
 | Pleural_Effusion        |    163144    |  78742  |  338408  |  20215  |
 | total        |    600510   |
+
+
+
+when test:
+pretrain set to false
+dev_batch_size to 1
